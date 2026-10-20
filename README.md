@@ -6,15 +6,20 @@ The whole app is one self-contained file: `index.html`. It needs no build step. 
 
 ## Updating the vocabulary
 
-The words live in the `RAW` array in `index.html`. Each entry has four parts:
+The words come from the **RC Arabic Vocab** Google Sheet, which loads each time the page opens. To add or change words, edit the sheet. No code change is needed.
 
-```js
-["كِتَابٌ", "kitābun", "book", "L1"]   // [Arabic, transliteration, English, set id]
-```
+| Column | Example | Notes |
+|---|---|---|
+| Arabic | كِتَابٌ | Required |
+| English | book | Required |
+| Book | 1 | Becomes a "Book 1" filter |
+| Lesson | 1 | Becomes a "Lesson 1" filter |
+| Category | Noun | Becomes a category filter |
+| Transliteration | kitābun | Optional. If present, the app offers a "Show pronunciation" option |
 
-To add a lesson, add an entry to `SETS`, for example `{ id: "L4", name: "Lesson 4" }`, then add words tagged `"L4"`.
+Filters appear only for columns with two or more different values. The sheet must be shared as **Anyone with the link: Viewer**, or the page can't read it. The sheet ID is set in `SHEET_ID` in `index.html`.
 
 ## Notes
 
 - Students' "words to practice" lists are saved in their own browser (`localStorage`). Nothing is sent to a server.
-- Fonts (Amiri, Figtree) load from Google Fonts.
+- Fonts (Noto Naskh Arabic, Figtree) load from Google Fonts.

@@ -6,7 +6,7 @@
 <title>Madinah Arabic Vocabulary</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;700&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #EDF0F4;
@@ -74,11 +74,13 @@
   .wrap { max-width: 560px; margin: 0 auto; padding: 18px 16px 40px; }
   h1 { font-size: 22px; line-height: 1.2; margin: 0; font-weight: 700; }
   .sub { color: var(--muted); margin: 2px 0 16px; font-size: 15px; }
-  .ar { font-family: "Amiri", "Noto Naskh Arabic", "Geeza Pro", "Traditional Arabic", serif; direction: rtl; }
+  .ar { font-family: "Noto Naskh Arabic", "Geeza Pro", "Traditional Arabic", serif; direction: rtl; }
   button { font: inherit; color: inherit; cursor: pointer; }
   button:focus-visible, .card:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .filter-group { margin-bottom: 12px; }
+  .filter-label { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 0 0 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chip {
     border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
     padding: 8px 14px; border-radius: 999px; font-weight: 600; min-height: 40px;
@@ -164,7 +166,7 @@
   <h1>Madinah Arabic Vocabulary</h1>
   <p class="sub">Book One class vocabulary</p>
 
-  <div class="chips" id="chips" role="group" aria-label="Choose lessons"></div>
+  <div id="filters"></div>
   <div class="seg" id="dir" role="group" aria-label="Direction"></div>
   <div class="toggles" id="globalToggles"></div>
 
@@ -176,83 +178,66 @@
 
 <script>
 (function () {
-  var SETS = [
-    { id: "L1", name: "Lesson 1" },
-    { id: "L2", name: "Lesson 2" },
-    { id: "L3", name: "Lesson 3" },
-    { id: "P", name: "Prepositions" }
+  // Vocabulary lives in the "RC Arabic Vocab" Google Sheet.
+  // Columns: Arabic, English, Book, Lesson, Category (optional: Transliteration).
+  // The sheet must be shared as "Anyone with the link: Viewer".
+  var SHEET_ID = "1-TLcwF_g2QhAATTMvclwWWCSz5mAdXLTTwo5XNJFRtk";
+  var SHEET_NAME = "Sheet1";
+  var SHEET_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID +
+    "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(SHEET_NAME);
+
+  // Filter groups, built from the sheet's Book, Lesson and Category values.
+  var GROUPS = [
+    { key: "book", label: "Book", chip: function (v) { return /^\d+$/.test(v) ? "Book " + v : v; } },
+    { key: "lesson", label: "Lesson", chip: function (v) { return /^\d+$/.test(v) ? "Lesson " + v : v; } },
+    { key: "category", label: "Category", chip: function (v) { return v; } }
   ];
 
-  // [Arabic, transliteration, English, set]
-  var RAW = [
-    ["هَذَا", "hādhā", "this (masculine)", "L1"],
-    ["مَا", "mā", "what? (things, animals)", "L1"],
-    ["مَنْ", "man", "who? (people)", "L1"],
-    ["أَ", "a-", "is…? (turns a statement into a question)", "L1"],
-    ["نَعَمْ", "naʿam", "yes", "L1"],
-    ["لَا", "lā", "no", "L1"],
-    ["بَيْتٌ", "baytun", "house", "L1"],
-    ["مَسْجِدٌ", "masjidun", "mosque", "L1"],
-    ["بَابٌ", "bābun", "door", "L1"],
-    ["كِتَابٌ", "kitābun", "book", "L1"],
-    ["قَلَمٌ", "qalamun", "pen", "L1"],
-    ["مِفْتَاحٌ", "miftāḥun", "key", "L1"],
-    ["مَكْتَبٌ", "maktabun", "desk", "L1"],
-    ["سَرِيرٌ", "sarīrun", "bed", "L1"],
-    ["كُرْسِيٌّ", "kursiyyun", "chair", "L1"],
-    ["نَجْمٌ", "najmun", "star", "L1"],
-    ["قَمِيصٌ", "qamīṣun", "shirt", "L1"],
-    ["مِنْدِيلٌ", "mindīlun", "handkerchief", "L1"],
-    ["وَلَدٌ", "waladun", "boy", "L1"],
-    ["طَالِبٌ", "ṭālibun", "student", "L1"],
-    ["رَجُلٌ", "rajulun", "man", "L1"],
-    ["تَاجِرٌ", "tājirun", "merchant", "L1"],
-    ["طَبِيبٌ", "ṭabībun", "doctor", "L1"],
-    ["كَلْبٌ", "kalbun", "dog", "L1"],
-    ["قِطٌّ", "qiṭṭun", "cat", "L1"],
-    ["حِمَارٌ", "ḥimārun", "donkey", "L1"],
-    ["حِصَانٌ", "ḥiṣānun", "horse", "L1"],
-    ["جَمَلٌ", "jamalun", "camel", "L1"],
-    ["دِيكٌ", "dīkun", "rooster", "L1"],
+  var WORDS = [];
+  var VALUES = {};
+  var HAS_TR = false;
 
-    ["ذَلِكَ", "dhālika", "that (masculine)", "L2"],
-    ["إِمَامٌ", "imāmun", "imam", "L2"],
-    ["حَجَرٌ", "ḥajarun", "stone, rock", "L2"],
-    ["سُكَّرٌ", "sukkarun", "sugar", "L2"],
-    ["لَبَنٌ", "labanun", "milk", "L2"],
+  function parseCSV(text) {
+    var rows = [], row = [], cell = "", q = false;
+    for (var i = 0; i < text.length; i++) {
+      var c = text[i];
+      if (q) {
+        if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+        else cell += c;
+      } else if (c === '"') q = true;
+      else if (c === ",") { row.push(cell); cell = ""; }
+      else if (c === "\n" || c === "\r") {
+        if (c === "\r" && text[i + 1] === "\n") i++;
+        row.push(cell); rows.push(row); row = []; cell = "";
+      } else cell += c;
+    }
+    if (cell || row.length) { row.push(cell); rows.push(row); }
+    return rows;
+  }
 
-    ["حُلْوٌ", "ḥulwun", "sweet", "L3"],
-    ["مَرِيضٌ", "marīḍun", "sick", "L3"],
-    ["الدُّكَّانُ", "ad-dukkānu", "the shop", "L3"],
-    ["غَنِيٌّ", "ghaniyyun", "rich", "L3"],
-    ["طَوِيلٌ", "ṭawīlun", "tall", "L3"],
-    ["فَقِيرٌ", "faqīrun", "poor", "L3"],
-    ["قَصِيرٌ", "qaṣīrun", "short", "L3"],
-    ["التُّفَّاحُ", "at-tuffāḥu", "the apple", "L3"],
-    ["بَارِدٌ", "bāridun", "cold", "L3"],
-    ["حَارٌّ", "ḥārrun", "hot", "L3"],
-    ["جَالِسٌ", "jālisun", "sitting", "L3"],
-    ["وَاقِفٌ", "wāqifun", "standing", "L3"],
-    ["جَدِيدٌ", "jadīdun", "new", "L3"],
-    ["قَدِيمٌ", "qadīmun", "old", "L3"],
-    ["قَرِيبٌ", "qarībun", "near", "L3"],
-    ["بَعِيدٌ", "baʿīdun", "far away", "L3"],
-    ["نَظِيفٌ", "naẓīfun", "clean", "L3"],
-    ["وَسِخٌ", "wasikhun", "dirty", "L3"],
-    ["صَغِيرٌ", "ṣaghīrun", "small", "L3"],
-    ["كَبِيرٌ", "kabīrun", "big", "L3"],
-    ["خَفِيفٌ", "khafīfun", "light (weight)", "L3"],
-    ["ثَقِيلٌ", "thaqīlun", "heavy", "L3"],
-    ["الوَرَقُ", "al-waraqu", "the paper", "L3"],
-    ["المَاءُ", "al-māʾu", "the water", "L3"],
-    ["جَمِيلٌ", "jamīlun", "beautiful", "L3"],
+  function sortValues(a, b) {
+    var na = parseFloat(a), nb = parseFloat(b);
+    if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
+    return a.localeCompare(b);
+  }
 
-    ["فِي", "fī", "in", "P"],
-    ["إِلَى", "ilā", "to", "P"],
-    ["مِنْ", "min", "from", "P"],
-    ["عَلَى", "ʿalā", "on", "P"]
-  ];
-  var WORDS = RAW.map(function (r) { return { ar: r[0], tr: r[1], en: r[2], set: r[3] }; });
+  function setWords(rows) {
+    var head = (rows.shift() || []).map(function (h) { return h.trim().toLowerCase(); });
+    function col(name) { return head.indexOf(name); }
+    var ci = { ar: col("arabic"), en: col("english"), book: col("book"), lesson: col("lesson"), category: col("category"), tr: col("transliteration") };
+    if (ci.ar < 0 || ci.en < 0) throw new Error("The sheet needs Arabic and English columns.");
+    function get(r, i) { return i < 0 ? "" : String(r[i] || "").trim(); }
+    WORDS = rows.map(function (r) {
+      return { ar: get(r, ci.ar), en: get(r, ci.en), book: get(r, ci.book), lesson: get(r, ci.lesson), category: get(r, ci.category), tr: get(r, ci.tr) };
+    }).filter(function (w) { return w.ar && w.en; });
+    HAS_TR = WORDS.some(function (w) { return w.tr; });
+    GROUPS.forEach(function (g) {
+      var seen = {};
+      WORDS.forEach(function (w) { if (w[g.key]) seen[w[g.key]] = true; });
+      VALUES[g.key] = Object.keys(seen).sort(sortValues);
+      S.filters[g.key] = new Set(VALUES[g.key]);
+    });
+  }
 
   var KEY = "madinah-vocab-practice-v1";
   function load() { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { return []; } }
@@ -262,7 +247,7 @@
     tab: "cards",
     dir: "ar-en",
     pron: false,
-    sets: new Set(SETS.map(function (s) { return s.id; })),
+    filters: {},
     shuffle: true,
     onlyReview: false,
     deck: null,
@@ -283,8 +268,15 @@
     }
     return b;
   }
-  function pool() { return WORDS.filter(function (w) { return S.sets.has(w.set); }); }
-  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  // A word is included when, in every group that has values, its value is selected.
+  function matches(w) {
+    return GROUPS.every(function (g) {
+      return !VALUES[g.key].length || !w[g.key] || S.filters[g.key].has(w[g.key]);
+    });
+  }
+  function pool() { return WORDS.filter(matches); }
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+  function trLine(w) { return w.tr ? '<div class="tr">' + esc(w.tr) + "</div>" : ""; }
 
   function buildDeck(list) {
     var p = list || pool();
@@ -298,16 +290,23 @@
   /* ---------- shared controls ---------- */
   function renderChips() {
     var h = "";
-    SETS.forEach(function (s) {
-      var n = WORDS.filter(function (w) { return w.set === s.id; }).length;
-      h += '<button class="chip" data-set="' + s.id + '" aria-pressed="' + S.sets.has(s.id) + '">' + s.name + " (" + n + ")</button>";
+    GROUPS.forEach(function (g) {
+      var vals = VALUES[g.key];
+      if (vals.length < 2) return;
+      h += '<div class="filter-group"><p class="filter-label">' + g.label + '</p><div class="chips" role="group" aria-label="Choose ' + g.label.toLowerCase() + '">';
+      vals.forEach(function (v) {
+        var n = WORDS.filter(function (w) { return w[g.key] === v; }).length;
+        h += '<button class="chip" data-group="' + g.key + '" data-val="' + esc(v) + '" aria-pressed="' + S.filters[g.key].has(v) + '">' + esc(g.chip(v)) + " (" + n + ")</button>";
+      });
+      h += "</div></div>";
     });
-    $("#chips").innerHTML = h;
+    $("#filters").innerHTML = h;
     Array.prototype.forEach.call(document.querySelectorAll(".chip"), function (b) {
       b.addEventListener("click", function () {
-        var id = b.getAttribute("data-set");
-        if (S.sets.has(id)) { if (S.sets.size > 1) S.sets.delete(id); }
-        else S.sets.add(id);
+        var set = S.filters[b.getAttribute("data-group")];
+        var v = b.getAttribute("data-val");
+        if (set.has(v)) { if (set.size > 1) set.delete(v); }
+        else set.add(v);
         S.deck = null;
         S.quiz = { phase: "setup" };
         render();
@@ -327,6 +326,7 @@
         render();
       });
     });
+    if (!HAS_TR) { $("#globalToggles").innerHTML = ""; return; }
     $("#globalToggles").innerHTML =
       '<label class="tog"><input type="checkbox" id="t-pron"' + (S.pron ? " checked" : "") + '> Show pronunciation with Arabic</label>';
     $("#t-pron").addEventListener("change", function (e) { S.pron = e.target.checked; render(); });
@@ -345,11 +345,11 @@
   function cardFaces(w) {
     var front, back;
     if (S.dir === "ar-en") {
-      front = '<div class="big ar" lang="ar">' + w.ar + "</div>" + (S.pron ? '<div class="tr">' + esc(w.tr) + "</div>" : "");
-      back = '<div class="en">' + esc(w.en) + '</div><div class="tr">' + esc(w.tr) + '</div><div class="small ar" lang="ar">' + w.ar + "</div>";
+      front = '<div class="big ar" lang="ar">' + esc(w.ar) + "</div>" + (S.pron ? trLine(w) : "");
+      back = '<div class="en">' + esc(w.en) + "</div>" + trLine(w) + '<div class="small ar" lang="ar">' + esc(w.ar) + "</div>";
     } else {
       front = '<div class="en big">' + esc(w.en) + "</div>";
-      back = '<div class="big ar" lang="ar">' + w.ar + '</div><div class="tr">' + esc(w.tr) + "</div>";
+      back = '<div class="big ar" lang="ar">' + esc(w.ar) + "</div>" + trLine(w);
     }
     return { front: front, back: back };
   }
@@ -489,7 +489,7 @@
       if (q.missedList.length) {
         r += "<p><strong>Words to review</strong></p><ul class=\"missed\">";
         q.missedList.forEach(function (w) {
-          r += '<li><span class="ar" lang="ar">' + w.ar + '</span><span class="meaning">' + esc(w.en) + "<span>" + esc(w.tr) + "</span></span></li>";
+          r += '<li><span class="ar" lang="ar">' + esc(w.ar) + '</span><span class="meaning">' + esc(w.en) + (w.tr ? "<span>" + esc(w.tr) + "</span>" : "") + "</span></li>";
         });
         r += "</ul>";
       }
@@ -508,7 +508,7 @@
     var w = cur.w;
     var prompt;
     if (S.dir === "ar-en") {
-      prompt = '<div class="big ar" lang="ar">' + w.ar + "</div>" + (S.pron ? '<div class="tr">' + esc(w.tr) + "</div>" : "");
+      prompt = '<div class="big ar" lang="ar">' + esc(w.ar) + "</div>" + (S.pron ? trLine(w) : "");
     } else {
       prompt = '<div class="en big">' + esc(w.en) + "</div>";
     }
@@ -523,13 +523,13 @@
         else if (idx === q.picked) { cls += " wrong"; mark = '<span class="mark">✗ Not this one</span>'; }
       }
       html += '<button class="' + cls + '" data-i="' + idx + '"' + (q.picked !== null ? " disabled" : "") + ">" +
-        '<span class="label' + (isAr ? " ar" : "") + '"' + (isAr ? ' lang="ar"' : "") + ">" + (isAr ? o.ar : esc(o.en)) + "</span>" + mark + "</button>";
+        '<span class="label' + (isAr ? " ar" : "") + '"' + (isAr ? ' lang="ar"' : "") + ">" + esc(isAr ? o.ar : o.en) + "</span>" + mark + "</button>";
     });
     html += "</div>";
     if (q.picked !== null) {
       var ok = cur.opts[q.picked].ar === w.ar;
-      html += '<div class="feedback"><strong>' + (ok ? "Correct." : "Not quite.") + '</strong><span class="ar" lang="ar">' + w.ar + "</span> " +
-        '<span class="tr">' + esc(w.tr) + "</span> means <strong style=\"display:inline\">" + esc(w.en) + "</strong>.</div>" +
+      html += '<div class="feedback"><strong>' + (ok ? "Correct." : "Not quite.") + '</strong><span class="ar" lang="ar">' + esc(w.ar) + "</span> " +
+        (w.tr ? '<span class="tr">' + esc(w.tr) + "</span> " : "") + "means <strong style=\"display:inline\">" + esc(w.en) + "</strong>.</div>" +
         '<div class="actions"><button class="btn primary" id="next">' + (q.n + 1 === q.qs.length ? "See my score" : "Next question") + "</button></div>";
     }
     m.innerHTML = html;
@@ -561,7 +561,25 @@
     if (S.tab === "cards") renderCards(); else renderQuiz();
   }
 
-  render();
+  function showMessage(title, body) {
+    $("#main").innerHTML = '<div class="panel"><h2>' + title + '</h2><p class="muted">' + body + "</p></div>";
+  }
+
+  showMessage("Loading words…", "Getting the latest vocabulary list.");
+  fetch(SHEET_URL, { cache: "no-store" })
+    .then(function (res) {
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return res.text();
+    })
+    .then(function (text) {
+      if (/^\s*</.test(text)) throw new Error("The sheet is not shared publicly.");
+      setWords(parseCSV(text));
+      if (!WORDS.length) { showMessage("No words yet", "The vocabulary sheet is empty."); return; }
+      render();
+    })
+    .catch(function () {
+      showMessage("Couldn't load the words", "Check your connection and reload the page. If this keeps happening, let your teacher know.");
+    });
 })();
 </script>
 </body>
