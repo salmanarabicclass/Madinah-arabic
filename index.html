@@ -183,8 +183,9 @@
   // The sheet must be shared as "Anyone with the link: Viewer".
   var SHEET_ID = "1-TLcwF_g2QhAATTMvclwWWCSz5mAdXLTTwo5XNJFRtk";
   var SHEET_NAME = "Sheet1";
+  // Loaded as a script (JSONP) because the CSV endpoint can't be read across sites.
   var SHEET_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID +
-    "/gviz/tq?tqx=out:csv&headers=1&sheet=" + encodeURIComponent(SHEET_NAME);
+    "/gviz/tq?headers=1&sheet=" + encodeURIComponent(SHEET_NAME) + "&tqx=responseHandler:";
 
   // Filter groups, built from the sheet's Book, Lesson and Category values.
   var GROUPS = [
@@ -197,22 +198,35 @@
   var VALUES = {};
   var HAS_TR = false;
 
-  function parseCSV(text) {
-    var rows = [], row = [], cell = "", q = false;
-    for (var i = 0; i < text.length; i++) {
-      var c = text[i];
-      if (q) {
-        if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
-        else cell += c;
-      } else if (c === '"') q = true;
-      else if (c === ",") { row.push(cell); cell = ""; }
-      else if (c === "\n" || c === "\r") {
-        if (c === "\r" && text[i + 1] === "\n") i++;
-        row.push(cell); rows.push(row); row = []; cell = "";
-      } else cell += c;
-    }
-    if (cell || row.length) { row.push(cell); rows.push(row); }
-    return rows;
+  // Resolves to rows of strings, header row first.
+  function loadSheet() {
+    return new Promise(function (resolve, reject) {
+      var cb = "__vocabSheet" + Date.now();
+      var tag = document.createElement("script");
+      var timer = setTimeout(function () { done(new Error("Timed out")); }, 15000);
+      function done(err, rows) {
+        clearTimeout(timer);
+        delete window[cb];
+        tag.remove();
+        if (err) reject(err); else resolve(rows);
+      }
+      window[cb] = function (res) {
+        if (!res || res.status === "error" || !res.table) {
+          var e = res && res.errors && res.errors[0];
+          return done(new Error(e ? e.detailed_message || e.message : "Bad response"));
+        }
+        function cell(c) {
+          if (!c || c.v === null || c.v === undefined) return "";
+          return typeof c.v === "string" ? c.v : (c.f !== undefined ? c.f : String(c.v));
+        }
+        var rows = [res.table.cols.map(function (c) { return c.label || ""; })];
+        res.table.rows.forEach(function (r) { rows.push((r.c || []).map(cell)); });
+        done(null, rows);
+      };
+      tag.onerror = function () { done(new Error("Network error, or the sheet is not shared publicly")); };
+      tag.src = SHEET_URL + cb + "&_=" + Date.now();
+      document.head.appendChild(tag);
+    });
   }
 
   function sortValues(a, b) {
@@ -566,19 +580,14 @@
   }
 
   showMessage("Loading words…", "Getting the latest vocabulary list.");
-  fetch(SHEET_URL, { cache: "no-store" })
-    .then(function (res) {
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      return res.text();
-    })
-    .then(function (text) {
-      if (/^\s*</.test(text)) throw new Error("The sheet is not shared publicly.");
-      setWords(parseCSV(text));
+  loadSheet()
+    .then(function (rows) {
+      setWords(rows);
       if (!WORDS.length) { showMessage("No words yet", "The vocabulary sheet is empty."); return; }
       render();
     })
-    .catch(function () {
-      showMessage("Couldn't load the words", "Check your connection and reload the page. If this keeps happening, let your teacher know.");
+    .catch(function (err) {
+      showMessage("Couldn't load the words", "Check your connection and reload the page. If this keeps happening, let your teacher know.<br><small>Details: " + esc(err && err.message || err) + "</small>");
     });
 })();
 </script>
