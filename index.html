@@ -236,10 +236,16 @@
   }
 
   function setWords(rows) {
-    var head = (rows.shift() || []).map(function (h) { return h.trim().toLowerCase(); });
+    // Google sometimes leaves the column labels blank and sends the header
+    // row as the first data row, so look for the names in either place.
+    function names(r) { return (r || []).map(function (h) { return String(h).trim().toLowerCase(); }); }
+    var head = names(rows.shift());
+    if (head.indexOf("arabic") < 0 && names(rows[0]).indexOf("arabic") >= 0) head = names(rows.shift());
+    // No names found: use the column order Arabic, English, Book, Lesson, Category, Transliteration.
+    if (head.indexOf("arabic") < 0) head = ["arabic", "english", "book", "lesson", "category", "transliteration"];
     function col(name) { return head.indexOf(name); }
     var ci = { ar: col("arabic"), en: col("english"), book: col("book"), lesson: col("lesson"), category: col("category"), tr: col("transliteration") };
-    if (ci.ar < 0 || ci.en < 0) throw new Error("The sheet needs Arabic and English columns.");
+    if (ci.en < 0) throw new Error("The sheet needs Arabic and English columns.");
     function get(r, i) { return i < 0 ? "" : String(r[i] || "").trim(); }
     WORDS = rows.map(function (r) {
       return { ar: get(r, ci.ar), en: get(r, ci.en), book: get(r, ci.book), lesson: get(r, ci.lesson), category: get(r, ci.category), tr: get(r, ci.tr) };
