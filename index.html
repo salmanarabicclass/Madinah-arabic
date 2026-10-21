@@ -125,6 +125,10 @@
   .en.big { font-size: 32px; line-height: 1.2; }
   .tr { color: var(--muted); font-size: 20px; font-style: italic; }
   .hint { position: absolute; bottom: 14px; font-size: 14px; color: var(--muted); }
+  .sample { font-size: 16px; line-height: 1.5; color: var(--muted); max-width: 32ch; margin-top: 6px; }
+  .sample.ar { font-size: 22px; line-height: 1.8; max-width: none; }
+  .sample strong { color: var(--ink); font-weight: 700; }
+  .sub a { color: var(--accent); font-weight: 600; }
   .type { position: absolute; top: 10px; right: 16px; font-size: 18px; line-height: 1.6; color: var(--muted); }
 
   .actions { display: flex; gap: 10px; margin-top: 18px; }
@@ -172,7 +176,7 @@
 <body>
 <div class="wrap">
   <h1>Madinah Arabic Vocabulary</h1>
-  <p class="sub">Book One class vocabulary</p>
+  <p class="sub">Book One class vocabulary · <a id="bankLink" href="#" target="_blank" rel="noopener">Word bank ↗</a></p>
 
   <details class="settings" id="settings">
     <summary><span>Lessons &amp; options<span class="settings-sum" id="settingsSum"></span></span></summary>
@@ -255,13 +259,13 @@
     var head = names(rows.shift());
     if (head.indexOf("arabic") < 0 && names(rows[0]).indexOf("arabic") >= 0) head = names(rows.shift());
     // No names found: use the column order Arabic, English, Book, Lesson, Category, Transliteration.
-    if (head.indexOf("arabic") < 0) head = ["arabic", "english", "book", "lesson", "category", "type", "transliteration"];
+    if (head.indexOf("arabic") < 0) head = ["arabic", "english", "book", "lesson", "category", "type", "sample sentence arabic", "sample sentence translation", "transliteration"];
     function col(name) { return head.indexOf(name); }
-    var ci = { ar: col("arabic"), en: col("english"), book: col("book"), lesson: col("lesson"), category: col("category"), type: col("type"), tr: col("transliteration") };
+    var ci = { ar: col("arabic"), en: col("english"), book: col("book"), lesson: col("lesson"), category: col("category"), type: col("type"), sar: col("sample sentence arabic"), sen: col("sample sentence translation"), tr: col("transliteration") };
     if (ci.en < 0) throw new Error("The sheet needs Arabic and English columns.");
     function get(r, i) { return i < 0 ? "" : String(r[i] || "").trim(); }
     WORDS = rows.map(function (r) {
-      return { ar: get(r, ci.ar), en: get(r, ci.en), book: get(r, ci.book), lesson: get(r, ci.lesson), category: get(r, ci.category), type: get(r, ci.type), tr: get(r, ci.tr) };
+      return { ar: get(r, ci.ar), en: get(r, ci.en), book: get(r, ci.book), lesson: get(r, ci.lesson), category: get(r, ci.category), type: get(r, ci.type), sar: get(r, ci.sar), sen: get(r, ci.sen), tr: get(r, ci.tr) };
     }).filter(function (w) { return w.ar && w.en; });
     HAS_TR = WORDS.some(function (w) { return w.tr; });
     GROUPS.forEach(function (g) {
@@ -309,6 +313,38 @@
   }
   function pool() { return WORDS.filter(matches); }
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+  // Bold the vocabulary word in a sample sentence. Text wrapped in *asterisks*
+  // is bolded; without asterisks, the word itself is found (ignoring Arabic
+  // vowel marks, capitals and notes in brackets like "(masculine)").
+  var MARKS = /[\u064B-\u065F\u0670]/;
+  function highlight(text, word) {
+    if (/\*[^*]+\*/.test(text)) {
+      return text.split(/\*([^*]+)\*/).map(function (part, i) {
+        return i % 2 ? "<strong>" + esc(part) + "</strong>" : esc(part);
+      }).join("");
+    }
+    function fold(str) {
+      var out = "", map = [];
+      for (var i = 0; i < str.length; i++) {
+        if (MARKS.test(str[i])) continue;
+        out += str[i].toLowerCase(); map.push(i);
+      }
+      return { s: out, map: map };
+    }
+    var target = fold(word.replace(/\s*\(.*?\)\s*/g, " ").replace(/[?؟…]/g, "").trim()).s;
+    var t = fold(text), at = target ? t.s.indexOf(target) : -1;
+    // English words must match whole words, so "in" isn't found inside "this".
+    var letter = /[a-z]/;
+    while (at >= 0 && letter.test(target) && (letter.test(t.s[at - 1] || "") || letter.test(t.s[at + target.length] || ""))) {
+      at = t.s.indexOf(target, at + 1);
+    }
+    if (at < 0) return esc(text);
+    var start = t.map[at], end = t.map[at + target.length - 1] + 1;
+    while (end < text.length && MARKS.test(text[end])) end++;
+    return esc(text.slice(0, start)) + "<strong>" + esc(text.slice(start, end)) + "</strong>" + esc(text.slice(end));
+  }
+  function sampleAr(w) { return w.sar ? '<div class="sample ar" lang="ar">' + highlight(w.sar, w.ar) + "</div>" : ""; }
+  function sampleEn(w) { return w.sen ? '<div class="sample">' + highlight(w.sen, w.en) + "</div>" : ""; }
   function trLine(w) { return w.tr ? '<div class="tr">' + esc(w.tr) + "</div>" : ""; }
 
   function buildDeck(list) {
@@ -378,11 +414,11 @@
   function cardFaces(w) {
     var front, back;
     if (S.dir === "ar-en") {
-      front = '<div class="big ar" lang="ar">' + esc(w.ar) + "</div>" + (S.pron ? trLine(w) : "");
-      back = '<div class="en">' + esc(w.en) + "</div>" + trLine(w) + '<div class="small ar" lang="ar">' + esc(w.ar) + "</div>";
+      front = '<div class="big ar" lang="ar">' + esc(w.ar) + "</div>" + (S.pron ? trLine(w) : "") + sampleAr(w);
+      back = '<div class="en">' + esc(w.en) + "</div>" + trLine(w) + '<div class="small ar" lang="ar">' + esc(w.ar) + "</div>" + sampleEn(w);
     } else {
-      front = '<div class="en big">' + esc(w.en) + "</div>";
-      back = '<div class="big ar" lang="ar">' + esc(w.ar) + "</div>" + trLine(w);
+      front = '<div class="en big">' + esc(w.en) + "</div>" + sampleEn(w);
+      back = '<div class="big ar" lang="ar">' + esc(w.ar) + "</div>" + trLine(w) + sampleAr(w);
     }
     var type = w.type ? '<span class="type ar" lang="ar">' + esc(w.type) + "</span>" : "";
     return { front: type + front, back: type + back };
@@ -628,6 +664,7 @@
     $("#main").innerHTML = '<div class="panel"><h2>' + title + '</h2><p class="muted">' + body + "</p></div>";
   }
 
+  $("#bankLink").href = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/edit?usp=sharing";
   showMessage("Loading words…", "Getting the latest vocabulary list.");
   loadSheet()
     .then(function (rows) {
