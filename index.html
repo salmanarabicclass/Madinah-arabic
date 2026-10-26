@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Madinah Arabic Vocabulary</title>
+<title>Madinah Arabic Practice</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;700&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
@@ -22,6 +22,8 @@
     --good-soft: #DDF1E5;
     --bad: #B3382C;
     --bad-soft: #F9E1DE;
+    --hl: #FBE3A0;
+    --hl-ink: #17202E;
     color-scheme: light;
     box-sizing: border-box;
     padding-top: env(safe-area-inset-top, 0px);
@@ -42,6 +44,8 @@
       --good-soft: #17301F;
       --bad: #F08B7E;
       --bad-soft: #3A1E1B;
+      --hl: #5B4A1A;
+      --hl-ink: #FFF4D6;
       color-scheme: dark;
     }
   }
@@ -59,10 +63,13 @@
     --good-soft: #17301F;
     --bad: #F08B7E;
     --bad-soft: #3A1E1B;
+    --hl: #5B4A1A;
+    --hl-ink: #FFF4D6;
     color-scheme: dark;
   }
   html { background: var(--bg); scroll-padding-top: env(safe-area-inset-top, 0px); }
   *, *::before, *::after { box-sizing: inherit; }
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     background: var(--bg);
@@ -168,6 +175,23 @@
   .missed .meaning { text-align: right; }
   .missed .meaning span { display: block; color: var(--muted); font-style: italic; font-size: 15px; }
 
+  /* grammar cards */
+  .card.g { min-height: 380px; }
+  .topic { position: absolute; top: 12px; left: 16px; right: 16px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; text-align: left; }
+  .gsent { font-size: clamp(30px, 9vw, 40px); line-height: 2; }
+  .gsent.small { font-size: 24px; line-height: 1.9; }
+  .gsent strong, .gmissed strong { background: var(--hl); color: var(--hl-ink); border-radius: 4px; box-shadow: 0 0 0 3px var(--hl); font-weight: 700; }
+  .gtrans { color: var(--muted); font-size: 16px; }
+  .gq { font-weight: 700; font-size: 16px; max-width: 30ch; margin-top: 6px; }
+  .ans.ar { font-size: 34px; line-height: 1.6; }
+  .ans-en { font-size: 20px; font-weight: 700; }
+  .expl { font-size: 15px; color: var(--muted); max-width: 34ch; }
+  .face.has-topic { padding-top: 40px; padding-bottom: 40px; }
+  .opt .gopt { display: flex; flex-direction: column; align-items: flex-start; gap: 0; }
+  .opt .gopt .ar { font-size: 24px; font-weight: 400; line-height: 1.6; }
+  .opt .gopt .opt-en { font-size: 14px; font-weight: 600; color: var(--muted); }
+  .gmissed { font-size: 24px; line-height: 1.9; }
+
   .foot { margin-top: 26px; color: var(--muted); font-size: 14px; }
 
   @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
@@ -175,11 +199,13 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Madinah Arabic Vocabulary</h1>
-  <p class="sub">Book One class vocabulary · <a id="bankLink" href="#" target="_blank" rel="noopener">Word bank ↗</a></p>
+  <h1>Madinah Arabic Practice</h1>
+  <p class="sub">Book One · <a id="bankLink" href="#" target="_blank" rel="noopener">Word bank ↗</a></p>
+
+  <div class="seg" id="mode" role="group" aria-label="What to practice"></div>
 
   <details class="settings" id="settings">
-    <summary><span>Lessons &amp; options<span class="settings-sum" id="settingsSum"></span></span></summary>
+    <summary><span><span id="settingsTitle">Lessons &amp; options</span><span class="settings-sum" id="settingsSum"></span></span></summary>
     <div class="settings-body">
       <div id="filters"></div>
       <div class="toggles" id="globalToggles"></div>
@@ -190,7 +216,7 @@
   <div class="tabs" id="tabs"></div>
   <main id="main"></main>
 
-  <p class="foot">Your practice list is saved in this browser only.</p>
+  <p class="foot">Your practice lists are saved in this browser only.</p>
 </div>
 
 <script>
@@ -200,9 +226,14 @@
   // The sheet must be shared as "Anyone with the link: Viewer".
   var SHEET_ID = "1-TLcwF_g2QhAATTMvclwWWCSz5mAdXLTTwo5XNJFRtk";
   var SHEET_NAME = "Sheet1";
+  // Grammar cards live in the same spreadsheet, on the "Grammar" tab.
+  // Columns: Topic, Sentence, Translation, Question, Answer, Answer English, Explanation, Choices.
+  var GRAMMAR_SHEET = "Grammar";
   // Loaded as a script (JSONP) because the CSV endpoint can't be read across sites.
-  var SHEET_URL = "https://docs.google.com/spreadsheets/d/" + SHEET_ID +
-    "/gviz/tq?headers=1&sheet=" + encodeURIComponent(SHEET_NAME) + "&tqx=responseHandler:";
+  function sheetUrl(name) {
+    return "https://docs.google.com/spreadsheets/d/" + SHEET_ID +
+      "/gviz/tq?headers=1&sheet=" + encodeURIComponent(name) + "&tqx=responseHandler:";
+  }
 
   // Filter groups, built from the sheet's Book, Lesson and Category values.
   var GROUPS = [
@@ -214,11 +245,17 @@
   var WORDS = [];
   var VALUES = {};
   var HAS_TR = false;
+  var GRAMMAR = [];
+  var TOPICS = [];
+  var GRAMMAR_ERROR = null;
+  // English names for answer terms, collected from the Answer English column.
+  var TERMS = {};
 
   // Resolves to rows of strings, header row first.
-  function loadSheet() {
+  var loads = 0;
+  function loadSheet(name) {
     return new Promise(function (resolve, reject) {
-      var cb = "__vocabSheet" + Date.now();
+      var cb = "__vocabSheet" + Date.now() + "_" + (loads++);
       var tag = document.createElement("script");
       var timer = setTimeout(function () { done(new Error("Timed out")); }, 15000);
       function done(err, rows) {
@@ -241,7 +278,7 @@
         done(null, rows);
       };
       tag.onerror = function () { done(new Error("Network error, or the sheet is not shared publicly")); };
-      tag.src = SHEET_URL + cb + "&_=" + Date.now();
+      tag.src = sheetUrl(name) + cb + "&_=" + Date.now();
       document.head.appendChild(tag);
     });
   }
@@ -252,14 +289,18 @@
     return a.localeCompare(b);
   }
 
-  function setWords(rows) {
-    // Google sometimes leaves the column labels blank and sends the header
-    // row as the first data row, so look for the names in either place.
+  // Google sometimes leaves the column labels blank and sends the header
+  // row as the first data row, so look for the names in either place.
+  // With no names at all, fall back to the documented column order.
+  function header(rows, key, fallback) {
     function names(r) { return (r || []).map(function (h) { return String(h).trim().toLowerCase(); }); }
     var head = names(rows.shift());
-    if (head.indexOf("arabic") < 0 && names(rows[0]).indexOf("arabic") >= 0) head = names(rows.shift());
-    // No names found: use the column order Arabic, English, Book, Lesson, Category, Transliteration.
-    if (head.indexOf("arabic") < 0) head = ["arabic", "english", "book", "lesson", "category", "type", "sample sentence arabic", "sample sentence translation", "transliteration"];
+    if (head.indexOf(key) < 0 && names(rows[0]).indexOf(key) >= 0) head = names(rows.shift());
+    return head.indexOf(key) < 0 ? fallback : head;
+  }
+
+  function setWords(rows) {
+    var head = header(rows, "arabic", ["arabic", "english", "book", "lesson", "category", "type", "sample sentence arabic", "sample sentence translation", "transliteration"]);
     function col(name) { return head.indexOf(name); }
     var ci = { ar: col("arabic"), en: col("english"), book: col("book"), lesson: col("lesson"), category: col("category"), type: col("type"), sar: col("sample sentence arabic"), sen: col("sample sentence translation"), tr: col("transliteration") };
     if (ci.en < 0) throw new Error("The sheet needs Arabic and English columns.");
@@ -276,11 +317,42 @@
     });
   }
 
+  function setGrammar(rows) {
+    var head = header(rows, "sentence", ["topic", "sentence", "translation", "question", "answer", "answer english", "explanation", "choices"]);
+    function get(r, name) { var i = head.indexOf(name); return i < 0 ? "" : String(r[i] || "").trim(); }
+    GRAMMAR = rows.map(function (r) {
+      var c = { topic: get(r, "topic") || "Grammar", sent: get(r, "sentence"), trans: get(r, "translation"), q: get(r, "question"),
+        ans: get(r, "answer"), ansEn: get(r, "answer english"), expl: get(r, "explanation"),
+        choices: get(r, "choices").split("|").map(function (x) { return x.trim(); }).filter(Boolean) };
+      c.id = "g:" + c.topic + "|" + c.sent + "|" + c.q;
+      return c;
+    }).filter(function (c) { return c.sent && c.ans; });
+    TOPICS = [];
+    GRAMMAR.forEach(function (c) {
+      if (TOPICS.indexOf(c.topic) < 0) TOPICS.push(c.topic);
+      if (c.ansEn && !TERMS[c.ans]) TERMS[c.ans] = c.ansEn;
+    });
+    // Without listed choices, offer the answers used elsewhere in the same topic.
+    GRAMMAR.forEach(function (c) {
+      if (c.choices.length < 2) {
+        c.choices = [];
+        GRAMMAR.forEach(function (o) { if (o.topic === c.topic && c.choices.indexOf(o.ans) < 0) c.choices.push(o.ans); });
+      }
+      if (c.choices.indexOf(c.ans) < 0) c.choices.push(c.ans);
+    });
+    S.topics = new Set(TOPICS);
+  }
+
   var KEY = "madinah-vocab-practice-v1";
   function load() { try { return JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { return []; } }
   function save() { try { localStorage.setItem(KEY, JSON.stringify(Array.from(S.missed))); } catch (e) {} }
 
+  var MODE_KEY = "madinah-mode";
+  function loadMode() { try { return localStorage.getItem(MODE_KEY) === "grammar" ? "grammar" : "vocab"; } catch (e) { return "vocab"; } }
+
   var S = {
+    mode: loadMode(),
+    topics: new Set(),
     tab: "cards",
     dir: "ar-en",
     pron: false,
@@ -311,7 +383,13 @@
       return !VALUES[g.key].length || !w[g.key] || S.filters[g.key].has(w[g.key]);
     });
   }
-  function pool() { return WORDS.filter(matches); }
+  function pool() {
+    if (S.mode === "grammar") return GRAMMAR.filter(function (c) { return S.topics.has(c.topic); });
+    return WORDS.filter(matches);
+  }
+  // Identity for practice lists and quiz answers: vocabulary uses the Arabic word.
+  function key(x) { return x.id || x.ar; }
+  function noun(n) { return S.mode === "grammar" ? (n === 1 ? "card" : "cards") : (n === 1 ? "word" : "words"); }
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
   // Bold the vocabulary word in a sample sentence. Text wrapped in *asterisks*
   // is bolded; without asterisks, the word itself is found (ignoring Arabic
@@ -349,7 +427,7 @@
 
   function buildDeck(list) {
     var p = list || pool();
-    if (!list && S.onlyReview) p = p.filter(function (w) { return S.missed.has(w.ar); });
+    if (!list && S.onlyReview) p = p.filter(function (w) { return S.missed.has(key(w)); });
     S.deck = S.shuffle ? shuffled(p) : p.slice();
     S.i = 0;
     S.flipped = false;
@@ -359,6 +437,25 @@
   /* ---------- shared controls ---------- */
   function renderChips() {
     var h = "";
+    if (S.mode === "grammar") {
+      h += '<div class="filter-group"><p class="filter-label">Topics</p><div class="chips" role="group" aria-label="Choose topics">';
+      TOPICS.forEach(function (t) {
+        var n = GRAMMAR.filter(function (c) { return c.topic === t; }).length;
+        h += '<button class="chip" data-topic="' + esc(t) + '" aria-pressed="' + S.topics.has(t) + '">' + esc(t) + " (" + n + ")</button>";
+      });
+      $("#filters").innerHTML = h + "</div></div>";
+      Array.prototype.forEach.call(document.querySelectorAll(".chip"), function (b) {
+        b.addEventListener("click", function () {
+          var t = b.getAttribute("data-topic");
+          if (S.topics.has(t)) { if (S.topics.size > 1) S.topics.delete(t); }
+          else S.topics.add(t);
+          S.deck = null;
+          S.quiz = { phase: "setup" };
+          render();
+        });
+      });
+      return;
+    }
     GROUPS.forEach(function (g) {
       var vals = VALUES[g.key];
       if (vals.length < 2) return;
@@ -383,7 +480,27 @@
     });
   }
 
+  function renderMode() {
+    $("#mode").innerHTML =
+      '<button data-mode="vocab" aria-pressed="' + (S.mode === "vocab") + '">Vocabulary</button>' +
+      '<button data-mode="grammar" aria-pressed="' + (S.mode === "grammar") + '">Grammar</button>';
+    Array.prototype.forEach.call(document.querySelectorAll("#mode button"), function (b) {
+      b.addEventListener("click", function () {
+        var m = b.getAttribute("data-mode");
+        if (m === S.mode) return;
+        S.mode = m;
+        try { localStorage.setItem(MODE_KEY, m); } catch (e) {}
+        S.deck = null;
+        S.onlyReview = false;
+        S.quiz = { phase: "setup" };
+        render();
+      });
+    });
+  }
+
   function renderDir() {
+    $("#dir").hidden = S.mode === "grammar";
+    if (S.mode === "grammar") { $("#globalToggles").innerHTML = ""; return; }
     $("#dir").innerHTML =
       '<button data-dir="ar-en" aria-pressed="' + (S.dir === "ar-en") + '">Arabic to English</button>' +
       '<button data-dir="en-ar" aria-pressed="' + (S.dir === "en-ar") + '">English to Arabic</button>';
@@ -411,7 +528,22 @@
   }
 
   /* ---------- flashcards ---------- */
+  function grammarFaces(c) {
+    var topic = '<span class="topic">' + esc(c.topic) + "</span>";
+    var front = topic +
+      '<div class="gsent ar" lang="ar">' + highlight(c.sent, "") + "</div>" +
+      (c.trans ? '<div class="gtrans">' + esc(c.trans) + "</div>" : "") +
+      '<div class="gq">' + esc(c.q) + "</div>";
+    var back = topic +
+      '<div class="ans ar" lang="ar">' + esc(c.ans) + "</div>" +
+      (c.ansEn ? '<div class="ans-en">' + esc(c.ansEn) + "</div>" : "") +
+      (c.expl ? '<div class="expl">' + esc(c.expl) + "</div>" : "") +
+      '<div class="gsent small ar" lang="ar">' + highlight(c.sent, "") + "</div>";
+    return { front: front, back: back };
+  }
+
   function cardFaces(w) {
+    if (S.mode === "grammar") return grammarFaces(w);
     var front, back;
     if (S.dir === "ar-en") {
       front = '<div class="big ar" lang="ar">' + esc(w.ar) + "</div>" + (S.pron ? trLine(w) : "") + sampleAr(w);
@@ -427,14 +559,14 @@
   function renderCards() {
     if (!S.deck) buildDeck();
     var p = pool();
-    var reviewCount = p.filter(function (w) { return S.missed.has(w.ar); }).length;
+    var reviewCount = p.filter(function (w) { return S.missed.has(key(w)); }).length;
     var h = '<div class="toggles">' +
       '<label class="tog"><input type="checkbox" id="t-shuffle"' + (S.shuffle ? " checked" : "") + "> Shuffle</label>" +
-      '<label class="tog' + (reviewCount ? "" : " off") + '"><input type="checkbox" id="t-review"' + (S.onlyReview ? " checked" : "") + (reviewCount ? "" : " disabled") + "> Only words to practice (" + reviewCount + ")</label>" +
+      '<label class="tog' + (reviewCount ? "" : " off") + '"><input type="checkbox" id="t-review"' + (S.onlyReview ? " checked" : "") + (reviewCount ? "" : " disabled") + "> Only " + noun(2) + " to practice (" + reviewCount + ")</label>" +
       "</div>";
 
     if (!S.deck.length) {
-      h += '<div class="panel"><h2>No words here yet</h2><p class="muted">Turn off “Only words to practice” or choose another lesson.</p></div>';
+      h += '<div class="panel"><h2>No ' + noun(2) + ' here yet</h2><p class="muted">Turn off “Only ' + noun(2) + ' to practice” or choose ' + (S.mode === "grammar" ? "another topic" : "another lesson") + ".</p></div>";
       $("#main").innerHTML = h;
       bindDeckToggles();
       return;
@@ -443,8 +575,8 @@
     if (S.i >= S.deck.length) {
       var got = 0, again = [];
       S.deck.forEach(function (w) {
-        if (S.results[w.ar] === "got") got++;
-        else if (S.results[w.ar] === "again") again.push(w);
+        if (S.results[key(w)] === "got") got++;
+        else if (S.results[key(w)] === "again") again.push(w);
       });
       h += '<div class="panel"><h2>Deck finished</h2>' +
         "<p>You marked <strong>" + got + "</strong> of " + S.deck.length + " as known" +
@@ -463,9 +595,9 @@
     var w = S.deck[S.i];
     var f = cardFaces(w);
     h += '<div class="counter"><span>Card ' + (S.i + 1) + " of " + S.deck.length + "</span></div>" +
-      '<div class="card-wrap"><div class="card' + (S.flipped ? " flipped" : "") + '" id="card" role="button" tabindex="0" aria-label="Flashcard. Press to flip.">' +
-      '<div class="face front" aria-hidden="' + S.flipped + '">' + f.front + '<div class="hint">Tap to flip</div></div>' +
-      '<div class="face back" aria-hidden="' + !S.flipped + '">' + f.back + "</div>" +
+      '<div class="card-wrap"><div class="card' + (S.mode === "grammar" ? " g" : "") + (S.flipped ? " flipped" : "") + '" id="card" role="button" tabindex="0" aria-label="Flashcard. Press to flip.">' +
+      '<div class="face front' + (S.mode === "grammar" ? " has-topic" : "") + '" aria-hidden="' + S.flipped + '">' + f.front + '<div class="hint">Tap to flip</div></div>' +
+      '<div class="face back' + (S.mode === "grammar" ? " has-topic" : "") + '" aria-hidden="' + !S.flipped + '">' + f.back + "</div>" +
       "</div></div>" +
       '<div class="actions">' +
       '<button class="btn secondary small-btn" id="prev"' + (S.i === 0 ? " disabled" : "") + ">Back</button>" +
@@ -487,8 +619,8 @@
       if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); }
     });
     function advance(result) {
-      S.results[w.ar] = result;
-      if (result === "got") S.missed.delete(w.ar); else S.missed.add(w.ar);
+      S.results[key(w)] = result;
+      if (result === "got") S.missed.delete(key(w)); else S.missed.add(key(w));
       save();
       S.i++;
       S.flipped = false;
@@ -510,6 +642,10 @@
   function label(x) { return S.dir === "ar-en" ? x.en : x.ar; }
 
   function makeOptions(w) {
+    if (S.mode === "grammar") {
+      // Keep the sheet's order so paired choices (mubtada' / khabar) stay in place.
+      return w.choices.map(function (c) { return { id: c === w.ans ? w.id : "opt:" + c, ar: c, en: TERMS[c] || "" }; });
+    }
     var others = shuffled(pool().filter(function (x) { return x.ar !== w.ar && x.en !== w.en; }));
     if (others.length < 3) {
       var extra = shuffled(WORDS.filter(function (x) {
@@ -532,7 +668,7 @@
     if (q.phase === "setup") {
       var size = pool().length;
       var h = '<div class="panel"><h2>Quiz</h2>' +
-        '<p class="muted">Pick the right answer for each word. You can retake it as often as you like.</p>' +
+        '<p class="muted">Pick the right answer for each ' + noun(1) + '. You can retake it as often as you like.</p>' +
         '<div class="seg" id="qn" role="group" aria-label="Number of questions">';
       [10, 20, 0].forEach(function (n) {
         var text = n === 0 ? "All (" + size + ")" : String(n);
@@ -558,8 +694,12 @@
       var msg = q.score === total ? "Perfect score." : pct >= 80 ? "Strong work. Review the few you missed." : pct >= 50 ? "Good start. Practice the ones below and try again." : "Keep going. Flashcards will help before your next try.";
       var r = '<div class="panel"><h2>Your score</h2><div class="score">' + q.score + " of " + total + '</div><p class="muted">' + msg + "</p>";
       if (q.missedList.length) {
-        r += "<p><strong>Words to review</strong></p><ul class=\"missed\">";
+        r += "<p><strong>" + (S.mode === "grammar" ? "Cards" : "Words") + " to review</strong></p><ul class=\"missed\">";
         q.missedList.forEach(function (w) {
+          if (S.mode === "grammar") {
+            r += '<li><span class="gmissed ar" lang="ar">' + highlight(w.sent, "") + '</span><span class="meaning"><span class="ar" lang="ar" style="font-style:normal">' + esc(w.ans) + "</span>" + (w.ansEn ? "<span>" + esc(w.ansEn) + "</span>" : "") + "</span></li>";
+            return;
+          }
           r += '<li><span class="ar" lang="ar">' + esc(w.ar) + '</span><span class="meaning">' + esc(w.en) + (w.tr ? "<span>" + esc(w.tr) + "</span>" : "") + "</span></li>";
         });
         r += "</ul>";
@@ -578,29 +718,36 @@
     var cur = q.qs[q.n];
     var w = cur.w;
     var prompt;
-    if (S.dir === "ar-en") {
+    if (S.mode === "grammar") {
+      prompt = '<div class="gsent ar" lang="ar">' + highlight(w.sent, "") + "</div>" +
+        (w.trans ? '<div class="gtrans">' + esc(w.trans) + "</div>" : "") + '<div class="gq">' + esc(w.q) + "</div>";
+    } else if (S.dir === "ar-en") {
       prompt = '<div class="big ar" lang="ar">' + esc(w.ar) + "</div>" + (S.pron ? trLine(w) : "");
     } else {
       prompt = '<div class="en big">' + esc(w.en) + "</div>";
     }
-    var isAr = S.dir === "en-ar";
+    var isAr = S.dir === "en-ar", isG = S.mode === "grammar";
     var html = '<div class="counter"><span>Question ' + (q.n + 1) + " of " + q.qs.length + "</span><span>Score " + q.score + "</span></div>" +
       '<div class="prompt">' + prompt + "</div><div class=\"opts\">";
     cur.opts.forEach(function (o, idx) {
-      var cls = "opt" + (isAr ? " ar" : "");
+      var cls = "opt" + (isAr && !isG ? " ar" : "");
       var mark = "";
       if (q.picked !== null) {
-        if (o.ar === w.ar) { cls += " correct"; mark = '<span class="mark">✓ Correct</span>'; }
+        if (key(o) === key(w)) { cls += " correct"; mark = '<span class="mark">✓ Correct</span>'; }
         else if (idx === q.picked) { cls += " wrong"; mark = '<span class="mark">✗ Not this one</span>'; }
       }
-      html += '<button class="' + cls + '" data-i="' + idx + '"' + (q.picked !== null ? " disabled" : "") + ">" +
-        '<span class="label' + (isAr ? " ar" : "") + '"' + (isAr ? ' lang="ar"' : "") + ">" + esc(isAr ? o.ar : o.en) + "</span>" + mark + "</button>";
+      var lab = isG
+        ? '<span class="label gopt"><span class="ar" lang="ar">' + esc(o.ar) + "</span>" + (o.en ? '<span class="opt-en">' + esc(o.en) + "</span>" : "") + "</span>"
+        : '<span class="label' + (isAr ? " ar" : "") + '"' + (isAr ? ' lang="ar"' : "") + ">" + esc(isAr ? o.ar : o.en) + "</span>";
+      html += '<button class="' + cls + '" data-i="' + idx + '"' + (q.picked !== null ? " disabled" : "") + ">" + lab + mark + "</button>";
     });
     html += "</div>";
     if (q.picked !== null) {
-      var ok = cur.opts[q.picked].ar === w.ar;
-      html += '<div class="feedback"><strong>' + (ok ? "Correct." : "Not quite.") + '</strong><span class="ar" lang="ar">' + esc(w.ar) + "</span> " +
-        (w.tr ? '<span class="tr">' + esc(w.tr) + "</span> " : "") + "means <strong style=\"display:inline\">" + esc(w.en) + "</strong>.</div>" +
+      var ok = key(cur.opts[q.picked]) === key(w);
+      html += '<div class="feedback"><strong>' + (ok ? "Correct." : "Not quite.") + "</strong>" + (isG
+        ? '<span class="ar" lang="ar">' + esc(w.ans) + "</span>" + (w.ansEn ? " · " + esc(w.ansEn) : "") + '<span style="display:block;margin-top:4px">' + esc(w.expl) + "</span>"
+        : '<span class="ar" lang="ar">' + esc(w.ar) + "</span> " +
+          (w.tr ? '<span class="tr">' + esc(w.tr) + "</span> " : "") + "means <strong style=\"display:inline\">" + esc(w.en) + "</strong>.") + "</div>" +
         '<div class="actions"><button class="btn primary" id="next">' + (q.n + 1 === q.qs.length ? "See my score" : "Next question") + "</button></div>";
     }
     m.innerHTML = html;
@@ -610,8 +757,8 @@
         if (q.picked !== null) return;
         var idx = parseInt(b.getAttribute("data-i"), 10);
         q.picked = idx;
-        if (cur.opts[idx].ar === w.ar) { q.score++; }
-        else { q.missedList.push(w); S.missed.add(w.ar); save(); }
+        if (key(cur.opts[idx]) === key(w)) { q.score++; }
+        else { q.missedList.push(w); S.missed.add(key(w)); save(); }
         renderQuiz();
         var n = $("#next");
         if (n) {
@@ -641,6 +788,12 @@
   }
 
   function renderSummary() {
+    $("#settingsTitle").textContent = S.mode === "grammar" ? "Topics" : "Lessons & options";
+    if (S.mode === "grammar") {
+      var n = S.topics.size;
+      $("#settingsSum").textContent = (n === TOPICS.length ? "All topics" : n <= 2 ? Array.from(S.topics).join(", ") : n + " topics") + " (" + pool().length + " cards)";
+      return;
+    }
     var parts = [];
     GROUPS.forEach(function (g) {
       var vals = VALUES[g.key], sel = S.filters[g.key];
@@ -653,6 +806,17 @@
   }
 
   function render() {
+    renderMode();
+    if (S.mode === "grammar" && !GRAMMAR.length) {
+      $("#settings").hidden = true;
+      $("#dir").hidden = true;
+      renderTabs();
+      showMessage("Grammar cards aren't available", GRAMMAR_ERROR
+        ? "They couldn't be loaded. Reload the page to try again.<br><small>Details: " + esc(GRAMMAR_ERROR) + "</small>"
+        : "Add cards to the Grammar tab of the word bank.");
+      return;
+    }
+    $("#settings").hidden = false;
     renderChips();
     renderSummary();
     renderDir();
@@ -666,10 +830,13 @@
 
   $("#bankLink").href = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/edit?usp=sharing";
   showMessage("Loading words…", "Getting the latest vocabulary list.");
-  loadSheet()
-    .then(function (rows) {
-      setWords(rows);
-      if (!WORDS.length) { showMessage("No words yet", "The vocabulary sheet is empty."); return; }
+  // The grammar tab loads alongside the words; if it fails, vocabulary still works.
+  var grammarLoad = loadSheet(GRAMMAR_SHEET).then(setGrammar, function (err) { GRAMMAR_ERROR = err && err.message || String(err); });
+  Promise.all([loadSheet(SHEET_NAME), grammarLoad])
+    .then(function (res) {
+      setWords(res[0]);
+      if (!WORDS.length && !GRAMMAR.length) { showMessage("No words yet", "The vocabulary sheet is empty."); return; }
+      if (!WORDS.length) S.mode = "grammar";
       render();
     })
     .catch(function (err) {
