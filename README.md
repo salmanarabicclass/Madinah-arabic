@@ -2,6 +2,8 @@
 
 Flashcards and quizzes for the vocabulary and grammar in Madinah Arabic Book One. A switch at the top of the page chooses **Vocabulary** or **Grammar**.
 
+Grammar mode is still being tested, so it only appears when the page address ends in `?grammar=true` (for example `https://salmanarabicclass.github.io/rcarabic/?grammar=true`). Without it, the page shows vocabulary only and doesn't load the Grammar tab. To publish grammar for everyone, set `GRAMMAR_ON` to `true` in `index.html`.
+
 The whole app is one self-contained file: `index.html`. It needs no build step. Open it in a browser, or serve it with GitHub Pages.
 
 ## Updating the vocabulary

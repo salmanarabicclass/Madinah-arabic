@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Madinah Arabic Practice</title>
+<title>Madinah Arabic Vocabulary</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;700&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
@@ -199,10 +199,10 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Madinah Arabic Practice</h1>
-  <p class="sub">Book One · <a id="bankLink" href="#" target="_blank" rel="noopener">Word bank ↗</a></p>
+  <h1 id="pageTitle">Madinah Arabic Vocabulary</h1>
+  <p class="sub"><span id="pageSub">Book One class vocabulary</span> · <a id="bankLink" href="#" target="_blank" rel="noopener">Word bank ↗</a></p>
 
-  <div class="seg" id="mode" role="group" aria-label="What to practice"></div>
+  <div class="seg" id="mode" role="group" aria-label="What to practice" hidden></div>
 
   <details class="settings" id="settings">
     <summary><span><span id="settingsTitle">Lessons &amp; options</span><span class="settings-sum" id="settingsSum"></span></span></summary>
@@ -229,6 +229,8 @@
   // Grammar cards live in the same spreadsheet, on the "Grammar" tab.
   // Columns: Topic, Sentence, Translation, Question, Answer, Answer English, Explanation, Choices.
   var GRAMMAR_SHEET = "Grammar";
+  // Grammar mode is in testing: it only appears when the page URL has ?grammar=true.
+  var GRAMMAR_ON = (function () { try { return new URLSearchParams(location.search).get("grammar") === "true"; } catch (e) { return false; } })();
   // Loaded as a script (JSONP) because the CSV endpoint can't be read across sites.
   function sheetUrl(name) {
     return "https://docs.google.com/spreadsheets/d/" + SHEET_ID +
@@ -348,7 +350,7 @@
   function save() { try { localStorage.setItem(KEY, JSON.stringify(Array.from(S.missed))); } catch (e) {} }
 
   var MODE_KEY = "madinah-mode";
-  function loadMode() { try { return localStorage.getItem(MODE_KEY) === "grammar" ? "grammar" : "vocab"; } catch (e) { return "vocab"; } }
+  function loadMode() { if (!GRAMMAR_ON) return "vocab"; try { return localStorage.getItem(MODE_KEY) === "grammar" ? "grammar" : "vocab"; } catch (e) { return "vocab"; } }
 
   var S = {
     mode: loadMode(),
@@ -481,6 +483,8 @@
   }
 
   function renderMode() {
+    $("#mode").hidden = !GRAMMAR_ON;
+    if (!GRAMMAR_ON) return;
     $("#mode").innerHTML =
       '<button data-mode="vocab" aria-pressed="' + (S.mode === "vocab") + '">Vocabulary</button>' +
       '<button data-mode="grammar" aria-pressed="' + (S.mode === "grammar") + '">Grammar</button>';
@@ -831,12 +835,18 @@
   $("#bankLink").href = "https://docs.google.com/spreadsheets/d/" + SHEET_ID + "/edit?usp=sharing";
   showMessage("Loading words…", "Getting the latest vocabulary list.");
   // The grammar tab loads alongside the words; if it fails, vocabulary still works.
-  var grammarLoad = loadSheet(GRAMMAR_SHEET).then(setGrammar, function (err) { GRAMMAR_ERROR = err && err.message || String(err); });
+  var grammarLoad = !GRAMMAR_ON ? Promise.resolve() :
+    loadSheet(GRAMMAR_SHEET).then(setGrammar, function (err) { GRAMMAR_ERROR = err && err.message || String(err); });
+  if (GRAMMAR_ON) {
+    document.title = "Madinah Arabic Practice";
+    $("#pageTitle").textContent = "Madinah Arabic Practice";
+    $("#pageSub").textContent = "Book One";
+  }
   Promise.all([loadSheet(SHEET_NAME), grammarLoad])
     .then(function (res) {
       setWords(res[0]);
       if (!WORDS.length && !GRAMMAR.length) { showMessage("No words yet", "The vocabulary sheet is empty."); return; }
-      if (!WORDS.length) S.mode = "grammar";
+      if (!WORDS.length && GRAMMAR_ON) S.mode = "grammar";
       render();
     })
     .catch(function (err) {
